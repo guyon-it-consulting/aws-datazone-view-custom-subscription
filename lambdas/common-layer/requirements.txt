@@ -1,0 +1,2 @@
+boto3==1.28.85
+sql_metadata==2.10.0
