@@ -66,7 +66,8 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       logRetention: logs.RetentionDays.TWO_WEEKS,
       layers: [
         commonLayer.layer
-      ]
+      ],
+      timeout: cdk.Duration.seconds(30)
     });
     // Register the dispatch Lambda on the rule
     customSubscriptionRule.addTarget(new eventsTargets.LambdaFunction(customSubscriptionFunction));
@@ -77,6 +78,8 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
           actions: [
             'glue:CreateTable',
             'glue:GetTable',
+            'glue:GetTables',
+            'glue:GetDatabase',
           ],
           resources: [
             `arn:aws:glue:${this.region}:${this.account}:catalog`,
@@ -97,6 +100,15 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
           ]
         }
       ));
+
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'iam:GetRole'
+        ],
+        resources: ['*']
+      })
+    );
 
     new cdk.CfnOutput(this, 'CustomSubscribeDatazoneRoleToBeAddedAsLakeFormationAdministrator', {
       value: customSubscriptionFunction.role!.roleArn

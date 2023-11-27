@@ -9,10 +9,49 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+sts_client = boto3.client('sts')
+iam_client = boto3.client('iam')
 glue_client = boto3.client('glue')
 lf_client = boto3.client('lakeformation')
 datazone_client = boto3.client('datazone')
 
+def get_current_principal_identifier():
+    callerArn = sts_client.get_caller_identity()['Arn']
+    logger.info(f"callerArn: {callerArn}")
+
+    import re
+    match = re.search(r'^arn:aws:sts::(\d+):assumed-role/([\w-]+)/([\w-]+)$', callerArn)
+    if match:
+        roleName = match.group(2)
+        roleArn = iam_client.get_role(RoleName=roleName)['Role']['Arn']
+        return roleArn
+    else:
+        # TODO do better
+        return ""
+
+def grant_database(database_name, principal_arn):
+    logger.info(f"granting {database_name} to {principal_arn}")
+
+    try:
+        lf_client.grant_permissions(
+            Principal={
+                'DataLakePrincipalIdentifier': principal_arn
+            },
+            Resource={
+                'Database': {
+                    'Name': database_name
+                }
+            },
+            Permissions=[
+                'ALL'
+            ],
+            PermissionsWithGrantOption=[
+                'ALL'
+            ]
+        )
+    except ClientError as e:
+        logger.error(e)
+        raise Exception(e)
 
 # Grant Read on a given table
 def grant_table(database_name, table_name, principal_arn):
@@ -145,6 +184,13 @@ def lambda_handler(event, context):
                                         event['detail']['environment']['provisionedResources']), None)['value']
 
             try:
+                lambda_principal = get_current_principal_identifier()
+                logger.info(f"Granting current principal to {consumer_database} Database to {lambda_principal}")
+                grant_database(
+                    database_name=consumer_database,
+                    principal_arn=lambda_principal
+                )
+
                 logger.info(
                     f"Create resource Link {table_name} in database {consumer_database} targeting {database}.{table_name}")
 
