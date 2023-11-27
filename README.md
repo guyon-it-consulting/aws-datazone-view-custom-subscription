@@ -1,24 +1,57 @@
 # Datazone View Subscription Proof of concept
 
+
+## Release Notes
+
+Service Broker API Release Notes
+
+## v0.02
+
+* Subscription is done at project level, and not at environment level. 
+  * It means that if the project contains multiple environments, the subscription is done one each environment.
+  * Change on the dispatching step for environment retrieval (it was wrong, subscription list env was not the requester one, but the source one)
+  * 
+* Stacks Identifier changes, it is required to `cdk destroy --all` on previous tag (v.0.01), then re-deploy
+
+## v0.01
+
+* Initial Proto
+
+## Description
+
 This project is a proof of concept on how provide access to Datazone unmanaged assets, with cross account constraints
 This is targeted on granting access to Glue View trough Athena.
 
 It handles cascading dependencies between views.
 
 Let's says we have got :
-* Database D1 :
-  * Table T1
-  * View V1 : `SELECT * FROM D1.T1`
-* Database D2 :
-  * View V2 : `SELECT * FROM D1.V1`
+* Database `database_c` :
+  * Table `table_c1`
+  * Table `table_c2`
+* Database `database_b` :
+  * View `view_b1` : `SELECT * FROM database_c.table_c1`
+  * View `view_b2` : `SELECT * FROM database_c.table_c2`
+* Database `database_a` :
+  * View `view_a` : `SELECT * FROM database_b.view_b1 b1 INNER JOIN FROM database_b.view_b2 b2 ON b1.id=b2.id`
 
-If we want to subscribe to `D2.V2` :
-* The process will analyze `D2.V2`
-  * Find deps on `D1.V1`, `D1.T1`
-* Create a resource link of `D2.V2` in sub_db database
-* Grant access to Datazone principal on `D2.V2`, `D1.V1`, and `D1.T1`
+If we want to subscribe to `database_a.view_a` :
+* The process will analyze `database_a.view_a`
+  * Find deps on `database_b.view_b1`, `database_b.view_b2`, `database_c.table_c1`, `database_c.table_c2`
+* Create a resource link table of `database_a.view_a` in sub_db database
+* Create a resource link database of `database_b` in sub_db database
+  * Grant DESCRIBE on resource link target `database_b`
+  * Grant DESCRIBE, SELECT on table `database_b.view_b1`
+  * Grant DESCRIBE, SELECT on table `database_b.view_b2`
+* Create a resource link database of `database_c` in sub_db database
+  * Grant DESCRIBE on resource link target `database_c`
+  * Grant DESCRIBE, SELECT on table `database_c.table_c1`
+  * Grant DESCRIBE, SELECT on table `database_c.table_c2`
 
-So Subscribed asset `D2.V2` appears in the Consumer Database `_sub_db` is queryable.
+> Please note that additional policy is required and is created dynamically to allow querying cross-account Glue Catalog
+
+So Subscribed asset `database_a.view_a` appears in the Consumer Database `_sub_db` is queryable.
+
+![](doc/resourcelink-view.drawio.png)
 
 Here the architecture and process.
 
@@ -119,17 +152,22 @@ fi
 
 ## Backlog
 
-- [ ] Simplify the dispatched events
+- [x] Simplify the dispatched events
 - [ ] Publish the subscription state back to the Datazone domain
 - [ ] Support un-publish by removing grants on related resources
-  - [ ] this requires a full analysis on all other subscribed Views!
+  - [ ] this requires a full analysis on all other subscribed Views - or storage
 - [ ] Provide more accurate SQL dependencies, on special SQL statements (UNNEST, ...)
   - [ ] try a Presto parser
   - [ ] try a bedrock analysis with Claude2
-- [ ] analyze how to add guardrails on lakeformation grants
-- [x] Add CustomResource to add the environment stack lambdarole as a LakeFormationAdministrator
-- [ ] Use only default bus
-  - [ ] Is that a good idea to add a resource policy on the default bus?
+- [x] Add CustomResource to add the environment stack lambda role as a LakeFormationAdministrator
 - [ ] Prepare a manual procedure to remove Subscription item
   - [ ] Remove ResourceLink
   - [ ] Revoke Grants on datazone _usr
+- [ ] What if the view is updated
+
+## Warning
+
+- An IAM inline policy is added to datazone_usr environment role.
+  - It contains additional grants to allow describing resource link target databases.
+  - The deletion of environment will fail. **Role has to be manually removed**
+  - as a workaround, a custom Datazone Athena Blueprint with required additional policies must be built. But this is not available yet

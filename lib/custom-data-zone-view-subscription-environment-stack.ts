@@ -18,6 +18,7 @@ export interface CustomDataZoneViewSubscriptionEnvironmentStackProps extends cdk
     events: {
       source: string
     }
+    environmentAccounts: cdk.Environment[]
   },
   lambda: {
     architecture: lambda.Architecture,
@@ -33,21 +34,28 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
     const datazoneBus = new events.EventBus(this, 'DataZone', {
       eventBusName: props.datazone.eventBusName,
     });
+
+    const principalAccounts = [
+      this.account,
+      props.datazone.accountId,
+      ...props.datazone.environmentAccounts.map(env => env.account)
+    ];
+
     // Allows the Datazone domain, which is possibly on another account, to put events on the bus
     datazoneBus.addToResourcePolicy(new iam.PolicyStatement({
       sid: 'AllowPutEventsFromDatazoneContext',
       actions: ['events:PutEvents'],
       resources: [datazoneBus.eventBusArn],
-      principals: [
-        new iam.AccountPrincipal(this.account),
-        new iam.AccountPrincipal(props.datazone.accountId)
-      ]
+      principals: [...new Set(principalAccounts.map(account => new iam.AccountPrincipal(account)))],
     }));
 
     const customSubscriptionRule = new events.Rule(this, 'CustomSubscription', {
       eventBus: datazoneBus,
       eventPattern: {
-        detailType: ['Subscription Request Accepted'],
+        detailType: [
+          'Unmanaged Asset Subscription Request Accepted',
+          'Unmanaged Asset Successfully Granted in Pub Environment'
+        ],
         source: [props.datazone.events.source]
       }
     });
@@ -67,7 +75,11 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       layers: [
         commonLayer.layer
       ],
-      timeout: cdk.Duration.seconds(30)
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        EVENT_BUS_NAME: props.datazone.eventBusName,
+        EVENT_SOURCE: props.datazone.events.source
+      }
     });
     // Register the dispatch Lambda on the rule
     customSubscriptionRule.addTarget(new eventsTargets.LambdaFunction(customSubscriptionFunction));
@@ -76,15 +88,46 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
     customSubscriptionFunction.addToRolePolicy(
       new iam.PolicyStatement({
           actions: [
-            'glue:CreateTable',
             'glue:GetTable',
             'glue:GetTables',
             'glue:GetDatabase',
           ],
           resources: [
+            // `arn:aws:glue:${this.region}:${this.account}:catalog`,
+            // `arn:aws:glue:${this.region}:${this.account}:database/*`,
+            // `arn:aws:glue:${this.region}:${this.account}:table/*/*`
+            // it needs to access cross account/region resources
+            `arn:aws:glue:*:*:catalog`,
+            `arn:aws:glue:*:*:database/*`,
+            `arn:aws:glue:*:*:table/*/*`
+          ]
+        }
+      ));
+
+    // Allows to create Database Tables details
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+          actions: [
+            'glue:CreateTable',
+            'glue:CreateDatabase',
+          ],
+          resources: [
             `arn:aws:glue:${this.region}:${this.account}:catalog`,
             `arn:aws:glue:${this.region}:${this.account}:database/*`,
             `arn:aws:glue:${this.region}:${this.account}:table/*/*`
+          ]
+        }
+      ));
+
+    // Allows to manage Datazone user role inline policy
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+          actions: [
+            'iam:GetRolePolicy',
+            'iam:PutRolePolicy',
+          ],
+          resources: [
+            `arn:aws:iam::${this.account}:role/datazone_usr_*`,
           ]
         }
       ));
@@ -103,10 +146,94 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
 
     customSubscriptionFunction.addToRolePolicy(
       new iam.PolicyStatement({
+          actions: [
+            'ram:CreateResourceShare',
+          ],
+          resources: [
+            '*'
+          ],
+          conditions: {
+            // string like if exists
+            'StringLikeIfExists': {
+              'ram:RequestedResourceType': [
+                'glue:Table',
+                'glue:Database',
+                'glue:Catalog'
+              ]
+            }
+          }
+        }
+      ));
+
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+          actions: [
+            'ram:UpdateResourceShare',
+            'ram:DeleteResourceShare',
+            'ram:AssociateResourceShare',
+            'ram:DisassociateResourceShare',
+            'ram:GetResourceShares',
+          ],
+          resources: [
+            '*'
+          ],
+          conditions: {
+            'StringLike': {
+              'ram:ResourceShareName': [
+                'LakeFormation*'
+              ]
+            }
+          }
+        }
+      ));
+
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+          actions: [
+            'glue:PutResourcePolicy',
+            'glue:DeleteResourcePolicy',
+            'organizations:DescribeOrganization',
+            'organizations:DescribeAccount',
+            'ram:Get*',
+            'ram:List*',
+            'organizations:ListRoots',
+            'organizations:ListAccountsForParent',
+            'organizations:ListOrganizationalUnitsForParent'
+          ],
+          resources: [
+            '*'
+          ]
+        }
+      ));
+
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+          actions: [
+            'glue:PutResourcePolicy',
+            'glue:DeleteResourcePolicy',
+            'organizations:DescribeOrganization',
+            'organizations:DescribeAccount',
+          ],
+          resources: [
+            '*'
+          ]
+        }
+      ));
+
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
         actions: [
           'iam:GetRole'
         ],
         resources: ['*']
+      })
+    );
+
+    // Allow the Lambda to put events on the target event bus, on all region/account
+    customSubscriptionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:*:*:event-bus/${props.datazone.eventBusName}`],
       })
     );
 

@@ -65,7 +65,8 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: [
           'datazone:GetListing',
-          'datazone:GetEnvironment'
+          'datazone:GetEnvironment',
+          'datazone:ListEnvironments',
         ],
         resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/${props.datazone.domainId}`],
       })

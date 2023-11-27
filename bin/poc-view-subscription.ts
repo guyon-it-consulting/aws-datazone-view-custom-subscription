@@ -24,50 +24,62 @@ const targetEnvs: Environment[] = [
   {account: 'YOUR_DATAZONE_ENVIRONMENT_AWS_ACCOUNT_ID', region: 'YOUR_DATAZONE_ENVIRONMENT_AWS_REGION'}
 ];
 
-// The name of the Event Bus in the target account
+// The name of the dedicated Event Bus to create in the target account
 const targetEventBusName = 'datazone-custom-bus';
 const targetEventSource = 'custom.datazone';
 // The main stack in the domain account
 const domainStack = new CustomDataZoneViewSubscriptionDomainStack(app, 'PocViewSubscriptionStack', {
   datazone: {
-    domainId: 'YOUR_DOMAIN_ID',
+    domainId: 'dzd_apcwv3stgpbj4m',
     targetEventBusName: targetEventBusName,
     targetEventSource: targetEventSource
   },
   lambda: lambdaConfig,
   env: datazoneDomainEnv,
 });
-new DebugEventBridgeStack(app, 'DebugEventBridgeStack', {
+new DebugEventBridgeStack(app, 'DebugDomainEventBridgeStack', {
   env: datazoneDomainEnv,
   debug: {
     eventBusName: 'default',
     eventPattern: {
       source: ['aws.datazone'],
-    }
+    },
+    logGroupPrefix: 'debug-domain'
   }
 })
 
+function formatResourceName(s: string) {
+  return replaceAll(replaceAll(s,'-',''), '_', '');
+}
+
+function replaceAll(str: string, search: string, replacement: string) {
+  return str.split(search).join(replacement);
+}
+
 // deployment
 targetEnvs.forEach(env => {
-  new CustomDataZoneViewSubscriptionEnvironmentStack(app, 'DatazoneProducerAccountStack', {
+  new CustomDataZoneViewSubscriptionEnvironmentStack(app, formatResourceName(`DatazoneProducerAccountStack_${env.account}_${env.region}`), {
+    stackName: 'DatazoneProducerAccountStack',
     env,
     datazone: {
       accountId: datazoneDomainEnv.account,
       eventBusName: targetEventBusName,
       events: {
         source: targetEventSource
-      }
+      },
+      environmentAccounts:  targetEnvs
     },
     lambda: lambdaConfig,
   });
 
-  new DebugEventBridgeStack(app, `DebugEventBridgeStack${env.account}`, {
+  new DebugEventBridgeStack(app, formatResourceName(`DebugProducerEventBridgeStack_${env.account}_${env.region}`), {
     env,
     debug: {
       eventBusName: targetEventBusName,
       eventPattern: {
         source: [targetEventSource],
-      }
+      },
+      logGroupPrefix: 'debug-producer'
     }
   })
 });
