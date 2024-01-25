@@ -156,9 +156,8 @@ fi
 ## Backlog
 
 - [x] Simplify the dispatched events
-- [ ] Publish the subscription state back to the Datazone domain
+- [ ] Publish the subscription state back to the Datazone domain. Unsure if its even possible yet.
 - [ ] Support un-publish by removing grants on related resources
-  - [ ] this requires a full analysis on all other subscribed Views - or storage
 - [ ] Provide more accurate SQL dependencies, on special SQL statements (UNNEST, ...)
   - [ ] try a Presto parser
   - [ ] try a bedrock analysis with Claude2
@@ -167,6 +166,8 @@ fi
   - [ ] Remove ResourceLink
   - [ ] Revoke Grants on datazone _usr
 - [ ] What if the view is updated
+- [ ] Switch role inline policy to custom managed policy, in order to not block the environment deletion
+- [ ] Keep track of all subscriptions (including Glue Table managed assets) in order to properly handle unsubscribe actions.
 
 ## Warning
 
