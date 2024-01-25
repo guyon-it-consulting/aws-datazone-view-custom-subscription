@@ -79,7 +79,6 @@ def grant_read_on_database(catalog_id, database_name, principal_arn, allows_gran
             'DESCRIBE',
         ]
 
-
     try:
         lf_client.grant_permissions(
             Principal={
@@ -111,7 +110,6 @@ def grant_read_on_table(catalog_id, database_name, table_name, principal_arn, al
             'SELECT',
             'DESCRIBE',
         ]
-
 
     try:
         lf_client.grant_permissions(
@@ -189,7 +187,8 @@ def grant_all_on_table(catalog_id, database_name, table_name, principal_arn):
         raise Exception(e)
 
 
-def create_resource_link_table(database, table_name, target_database, target_table_name, target_account_id, target_region ):
+def create_resource_link_table(database, table_name, target_database, target_table_name, target_account_id,
+                               target_region):
     try:
         glue_client.create_table(
             DatabaseName=database,
@@ -208,7 +207,8 @@ def create_resource_link_table(database, table_name, target_database, target_tab
         logger.warning('Resource Link already existing, not need to recreate it...')
         pass
 
-def create_resource_link_database(database_name, target_database, target_account_id, target_region ):
+
+def create_resource_link_database(database_name, target_database, target_account_id, target_region):
     try:
         glue_client.create_database(
             DatabaseInput={
@@ -225,24 +225,23 @@ def create_resource_link_database(database_name, target_database, target_account
         logger.warning('Resource Link already existing, not need to recreate it...')
         pass
 
-def ensure_role_has_extended_policy(role_arn):
 
+def ensure_role_has_extended_policy(role_arn):
     policy_document = 'DatazoneCustomSubscription'
     role_name = role_arn.split('/')[-1]
 
-    has_already_policy=False
+    has_already_policy = False
     try:
         # add needed IAM grants
         iam_client.get_role_policy(
             RoleName=role_name,
             PolicyName=policy_document
         )
-        has_already_policy=True
+        has_already_policy = True
     except iam_client.exceptions.NoSuchEntityException:
         pass
 
     if not has_already_policy:
-
         iam_client.put_role_policy(
             RoleName=role_name,
             PolicyName=policy_document,
@@ -266,7 +265,6 @@ def ensure_role_has_extended_policy(role_arn):
 }'''
         )
         logger.info("Put Extended role")
-
 
 
 # Cache of glue:GetTable responses, aim to speed up the analysis view process
@@ -340,6 +338,7 @@ def analyze_view(database_name, name):
                 deps_glue_tables.add(f"{next_database_name}.{next_table_name}")
 
     return deps_glue_tables
+
 
 def handle_unmanaged_asset_subscription_on_producer(event):
     logger.info('Hande subscription')
@@ -478,67 +477,45 @@ def handle_unmanaged_asset_subscription_on_consumer(event):
     logger.info(
         f"Create resource Link {table_name} in database {consumer_database} targeting {target_database}.{target_table_name}")
 
-
-    create_resource_link_table(consumer_database, table_name, target_database, target_table_name, target_account_id, target_region)
-
+    # check if we are in same account
+    if current_account_id == target_account_id:
+        logger.info("Same account - no need to create resource link")
+    else:
+        create_resource_link_table(consumer_database, table_name, target_database, target_table_name, target_account_id,
+                                   target_region)
 
     # First, grant Lambda principal to be able to grant to other principal
     grant_read_on_database(target_account_id, target_database, lambda_principal, allows_grants=True)
     grant_read_on_table(target_account_id, target_database, table_name, lambda_principal, allows_grants=True)
 
-
-
-
-    distinct_deps_databases=set()
+    distinct_deps_databases = set()
     distinct_deps_databases.add(target_database)
 
     for glueDep in event['detail']['glueDependencies']:
         # First, grant Lambda principal to be able to grant to other principal
         grant_read_on_database(target_account_id, glueDep['database_name'], lambda_principal, allows_grants=True)
-        grant_read_on_table(target_account_id, glueDep['database_name'], glueDep['table_name'], lambda_principal, allows_grants=True)
+        grant_read_on_table(target_account_id, glueDep['database_name'], glueDep['table_name'], lambda_principal,
+                            allows_grants=True)
 
         distinct_deps_databases.add(glueDep['database_name'])
         grant_read_on_table(target_account_id, glueDep['database_name'], glueDep['table_name'], user_role_arn)
 
-
     for database_name in distinct_deps_databases:
-        create_resource_link_database(database_name, database_name, target_account_id, target_region)
-        # Grant on resource link target
-        grant_read_on_database(target_account_id, database_name, user_role_arn)
-        # Grant on resource link
-        grant_read_on_database(current_account_id, database_name, user_role_arn)
 
+        # check if we are in same account
+        if current_account_id == target_account_id:
+            logger.info("Same account - no need to create resource link")
+        else:
+            create_resource_link_database(database_name, database_name, target_account_id, target_region)
+
+        # Grant on resource link (or localdatabase if we are in same account) target
+        grant_read_on_database(target_account_id, database_name, user_role_arn)
+        # Grant on resource link (or localdatabase if we are in same account)
+        grant_read_on_database(current_account_id, database_name, user_role_arn)
 
     grant_read_on_table(target_account_id, target_database, table_name, user_role_arn)
 
     ensure_role_has_extended_policy(user_role_arn)
-
-
-
-
-
-    # Create resource link on databases
-
-    # Grant this resource link to datazone user
-    # But it is not required as the datazone user is the database owner add has DESCRIBE,SELECT on all table
-    # grant_read_on_resource_link(current_account_id, consumer_database, table_name, user_role_arn)
-
-    # grant access to remote table
-    # but 1st, we need to grant the current lambda role as grantee
-
-    # try:
-    #     # grant_all_on_table(
-    #     #     account_id,
-    #     #     database,
-    #     #     table_name,
-    #     #     lambda_principal
-    #     # )
-    #
-    #
-    #
-    # except ClientError as e:
-    #     logger.error(e)
-    #     raise Exception(e)
 
 
 current_account_id = get_current_account_id()
