@@ -1,6 +1,6 @@
 {
   "name": "poc-view-subscription",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "bin": {
     "poc-view-subscription": "bin/poc-view-subscription.js"
   },
