@@ -10,7 +10,6 @@ import {Layer} from "./layer";
 
 export interface CustomDataZoneViewSubscriptionDomainStackProps extends cdk.StackProps {
   datazone: {
-    domainId: string,
     targetEventBusName?: string,
     targetEventSource: string
   },
@@ -54,7 +53,7 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
       environment: {
         EVENT_BUS_NAME: targetEventBusName,
         EVENT_SOURCE: props.datazone.targetEventSource
-      }
+      },
     });
 
     // Register the dispatch Lambda on the rule
@@ -68,7 +67,8 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
           'datazone:GetEnvironment',
           'datazone:ListEnvironments',
         ],
-        resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/${props.datazone.domainId}`],
+        // resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/${props.datazone.domainId}`],
+        resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/*`],
       })
     );
 

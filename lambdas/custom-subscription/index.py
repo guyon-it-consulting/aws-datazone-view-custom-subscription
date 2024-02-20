@@ -478,11 +478,11 @@ def handle_unmanaged_asset_subscription_on_consumer(event):
         f"Create resource Link {table_name} in database {consumer_database} targeting {target_database}.{target_table_name}")
 
     # check if we are in same account
-    if current_account_id == target_account_id:
-        logger.info("Same account - no need to create resource link")
-    else:
-        create_resource_link_table(consumer_database, table_name, target_database, target_table_name, target_account_id,
-                                   target_region)
+    # if current_account_id == target_account_id:
+    #     logger.info("Same account - no need to create resource link")
+    # else:
+    create_resource_link_table(consumer_database, table_name, target_database, target_table_name, target_account_id, target_region)
+    # TODO if already created ?
 
     # First, grant Lambda principal to be able to grant to other principal
     grant_read_on_database(target_account_id, target_database, lambda_principal, allows_grants=True)

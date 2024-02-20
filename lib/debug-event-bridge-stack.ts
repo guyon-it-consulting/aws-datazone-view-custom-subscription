@@ -25,7 +25,8 @@ export class DebugEventBridgeStack extends cdk.Stack {
 
     const logGroup = new logs.LogGroup(this, 'DebugLogGroup', {
       logGroupName: `/aws/events/${props.debug.logGroupPrefix ?? 'debug'}-${eventBusName}`,
-      retention: props.debug.logGroupRetention ?? logs.RetentionDays.ONE_WEEK
+      retention: props.debug.logGroupRetention ?? logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     rule.addTarget(new events_targets.CloudWatchLogGroup(logGroup));
 

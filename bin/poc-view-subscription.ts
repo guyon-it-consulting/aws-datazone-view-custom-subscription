@@ -30,7 +30,6 @@ const targetEventSource = 'custom.datazone';
 // The main stack in the domain account
 const domainStack = new CustomDataZoneViewSubscriptionDomainStack(app, 'PocViewSubscriptionStack', {
   datazone: {
-    domainId: 'dzd_apcwv3stgpbj4m',
     targetEventBusName: targetEventBusName,
     targetEventSource: targetEventSource
   },

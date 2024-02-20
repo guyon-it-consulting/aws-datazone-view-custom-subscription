@@ -290,5 +290,24 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       },
     });
 
+    // create custom Managed Policy for datazone_usr
+    new iam.ManagedPolicy(this, 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess', {
+      managedPolicyName: 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess',
+      document: new iam.PolicyDocument({
+        statements: [
+          new iam.PolicyStatement({
+            actions: [
+              'glue:GetDatabase',
+              'glue:GetDatabases',
+              'glue:GetTables',
+              'glue:GetPartition',
+              'glue:BatchGetPartition',
+            ],
+            resources: ['*']
+          })
+        ]
+      })
+    });
+
   }
 }
