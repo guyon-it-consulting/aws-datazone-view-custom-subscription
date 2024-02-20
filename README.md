@@ -5,18 +5,24 @@
 
 Service Broker API Release Notes
 
-## v0.03
+## v0.4.0
+
+* remove least privilege on specific Domain. can able all domains
+* Fix resourceLink Table Creation on same AwsAccount as environment
+* create dedicated Managed Policy
+
+## v0.3.0
 
 * Supports having Subscription Data and Consumer environment in same account
 
-## v0.02
+## v0.2.0
 
 * Subscription is done at project level, and not at environment level. 
   * It means that if the project contains multiple environments, the subscription is done one each environment.
   * Change on the dispatching step for environment retrieval (it was wrong, subscription list env was not the requester one, but the source one)
 * Stacks Identifier changes, it is required to `cdk destroy --all` on previous tag (v.0.01), then re-deploy
 
-## v0.01
+## v0.1.0
 
 * Initial Proto
 
