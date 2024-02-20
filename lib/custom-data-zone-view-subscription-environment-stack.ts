@@ -96,7 +96,7 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       layers: [
         commonLayer.layer
       ],
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.minutes(1),
       environment: {
         EVENT_BUS_NAME: props.datazone.eventBusName,
         EVENT_SOURCE: props.datazone.events.source,
@@ -278,8 +278,9 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       environment: {
         AWS_ACCOUNT: this.account,
         REGION: this.region
-      }
+      },
     });
+
     lakeformationDefaultSettingsHandler.addToRolePolicy(
       new iam.PolicyStatement({
           actions: [

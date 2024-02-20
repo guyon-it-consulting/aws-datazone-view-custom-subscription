@@ -7,14 +7,22 @@ import os
 import base64
 from sql_metadata import Parser
 from botocore.exceptions import ClientError
+from botocore.config import Config
 
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOGGER_LEVEL", "INFO"))
 
+ADAPTIVE_RETRIES = Config(
+    retries={
+        "total_max_attempts": 4,
+        "mode": "adaptive"
+    }
+)
+
 sts_client = boto3.client('sts')
 iam_client = boto3.client('iam')
 glue_client = boto3.client('glue')
-lf_client = boto3.client('lakeformation')
+lf_client = boto3.client('lakeformation', config=ADAPTIVE_RETRIES)
 events_client = boto3.client('events')
 
 
@@ -328,7 +336,7 @@ def analyze_view(database_name, name):
 
 
 def handle_unmanaged_asset_subscription_on_producer(event):
-    logger.info('Hande subscription')
+    logger.info('Handle subscription')
     if event['detail']['data']['isManagedAsset']:
         logger.info("This is a managed asset - ignore it")
         return
@@ -345,18 +353,15 @@ def handle_unmanaged_asset_subscription_on_producer(event):
     logger.debug(f"Roles for Subscription {subscriptions_principals_accounts}")
 
     table_arn = event['detail']['asset']['tableArn']
-    # table_name = event['detail']['asset']['tableName']
-    # database = event['detail']['asset']['databaseName']
+    table_name = event['detail']['asset']['tableName']
 
-    result = re.search(r"^arn:aws:glue:(\w+-\w+-\d):(\d+):table/(\w+)/(\w+)$", table_arn)
-    if not result:
-        raise Exception("Cannot parse table arn")
+    # table_arn 'arn:aws:glue:us-east-1:123456789101:table/my_database/my_table'
+    #split arn by ':'
+    arn_split = table_arn.split(':')
+    # keep last part and split with '/'
+    resource_split = arn_split[-1].split('/')
+    target_database = resource_split[1]
 
-    target_database = result.group(3)
-    table_name = result.group(4)
-
-    # account_id = result.group(2)
-    # region = result.group(1)
 
     logger.info(f"Handle table {table_name} in Database: {target_database}")
 
@@ -432,19 +437,18 @@ def handle_unmanaged_asset_subscription_on_producer(event):
 
 
 def handle_unmanaged_asset_subscription_on_consumer(event):
-    logger.info('Hande Unmanaged asset subscription on consumer')
+    logger.info('Handle Unmanaged asset subscription on consumer')
 
     table_arn = event['detail']['asset']['tableArn']
 
-    result = re.search(r"^arn:aws:glue:(\w+-\w+-\d):(\d+):table/(\w+)/(\w+)$", table_arn)
-    if not result:
-        raise Exception("Cannot parse table arn")
+    arn_split = table_arn.split(':')
+    target_region = arn_split[3]
+    target_account_id = arn_split[4]
 
-    target_database = result.group(3)
-    target_table_name = result.group(4)
+    resource_split = arn_split[5].split('/')
+    target_table_name = resource_split[2]
     table_name = target_table_name
-    target_account_id = result.group(2)
-    target_region = result.group(1)
+    target_database = resource_split[1]
 
     consumer_database = event['detail']['subscription']['glueConsumerDBName']
     user_role_arn = event['detail']['subscription']['athenaUserRoleArn']
