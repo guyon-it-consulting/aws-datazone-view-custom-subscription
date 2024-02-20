@@ -60,6 +60,27 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       }
     });
 
+
+    // create custom Managed Policy for datazone_usr
+    const datazoneCustomGrant = new iam.ManagedPolicy(this, 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess', {
+      managedPolicyName: 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess',
+      document: new iam.PolicyDocument({
+        statements: [
+          new iam.PolicyStatement({
+            actions: [
+              'glue:GetDatabase',
+              'glue:GetDatabases',
+              'glue:GetTables',
+              'glue:GetPartition',
+              'glue:BatchGetPartition',
+            ],
+            resources: ['*']
+          })
+        ]
+      })
+    });
+
+
     const commonLayer = new Layer(this, "CommonLayer", {
       runtime: props.lambda.runtime,
       architecture: props.lambda.architecture,
@@ -78,7 +99,9 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       environment: {
         EVENT_BUS_NAME: props.datazone.eventBusName,
-        EVENT_SOURCE: props.datazone.events.source
+        EVENT_SOURCE: props.datazone.events.source,
+        DATAZONE_USER_CUSTOM_MANAGED_POLICY_NAME: datazoneCustomGrant.managedPolicyName,
+        DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN: datazoneCustomGrant.managedPolicyArn
       }
     });
     // Register the dispatch Lambda on the rule
@@ -290,24 +313,7 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       },
     });
 
-    // create custom Managed Policy for datazone_usr
-    new iam.ManagedPolicy(this, 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess', {
-      managedPolicyName: 'DataZoneUserRoleCrossAccountGlueCatalogReadAccess',
-      document: new iam.PolicyDocument({
-        statements: [
-          new iam.PolicyStatement({
-            actions: [
-              'glue:GetDatabase',
-              'glue:GetDatabases',
-              'glue:GetTables',
-              'glue:GetPartition',
-              'glue:BatchGetPartition',
-            ],
-            resources: ['*']
-          })
-        ]
-      })
-    });
+
 
   }
 }

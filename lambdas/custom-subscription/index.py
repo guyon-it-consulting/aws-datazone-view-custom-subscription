@@ -227,44 +227,30 @@ def create_resource_link_database(database_name, target_database, target_account
 
 
 def ensure_role_has_extended_policy(role_arn):
-    policy_document = 'DatazoneCustomSubscription'
+
+    # Check if the role has the managed policy attached
+    has_already_policy = False
+    policy_name = os.environ['DATAZONE_USER_CUSTOM_MANAGED_POLICY_NAME']
+    policy_arn = os.environ['DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN']
+
+    # retrieve role name from arn
     role_name = role_arn.split('/')[-1]
 
-    has_already_policy = False
-    try:
-        # add needed IAM grants
-        iam_client.get_role_policy(
-            RoleName=role_name,
-            PolicyName=policy_document
-        )
-        has_already_policy = True
-    except iam_client.exceptions.NoSuchEntityException:
-        pass
+    resp = iam_client.list_attached_role_policies(
+        RoleName=role_name
+    )
+
+    for policy in resp['AttachedPolicies']:
+        if policy['PolicyName'] == policy_name:
+            has_already_policy = True
 
     if not has_already_policy:
-        iam_client.put_role_policy(
+        # Attach the managed policy
+        iam_client.attach_role_policy(
             RoleName=role_name,
-            PolicyName=policy_document,
-            PolicyDocument='''{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "glue:GetDatabase",
-        "glue:GetDatabases",
-        "glue:GetTables",
-        "glue:GetPartition",
-        "glue:BatchGetPartition"
-      ],
-      "Resource": [
-        "*"
-      ]
-    }
-  ]
-}'''
+            PolicyArn=policy_name
         )
-        logger.info("Put Extended role")
+        logger.info(f"Extended Datazone policy attached to role {role_name}")
 
 
 # Cache of glue:GetTable responses, aim to speed up the analysis view process
