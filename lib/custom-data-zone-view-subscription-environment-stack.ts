@@ -100,7 +100,6 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       environment: {
         EVENT_BUS_NAME: props.datazone.eventBusName,
         EVENT_SOURCE: props.datazone.events.source,
-        DATAZONE_USER_CUSTOM_MANAGED_POLICY_NAME: datazoneCustomGrant.managedPolicyName,
         DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN: datazoneCustomGrant.managedPolicyArn
       }
     });
@@ -146,8 +145,8 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
     customSubscriptionFunction.addToRolePolicy(
       new iam.PolicyStatement({
           actions: [
-            'iam:GetRolePolicy',
-            'iam:PutRolePolicy',
+            'iam:ListAttachedRolePolicies',
+            'iam:AttachRolePolicy',
           ],
           resources: [
             `arn:aws:iam::${this.account}:role/datazone_usr_*`,

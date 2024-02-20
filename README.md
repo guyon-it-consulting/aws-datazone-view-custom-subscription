@@ -5,6 +5,10 @@
 
 Service Broker API Release Notes
 
+## v0.5.1
+
+* fix managed policy issue
+
 ## v0.5.0
 
 * add configuration via file
@@ -177,8 +181,10 @@ fi
   - [ ] Remove ResourceLink
   - [ ] Revoke Grants on datazone _usr
 - [ ] What if the view is updated
-- [ ] Switch role inline policy to custom managed policy, in order to not block the environment deletion
+- [x] Switch role inline policy to custom managed policy, in order to not block the environment deletion
 - [ ] Keep track of all subscriptions (including Glue Table managed assets) in order to properly handle unsubscribe actions.
+- [ ] add DLQ handling
+- [ ] handle lakeformation API throttling
 
 ## Warning
 

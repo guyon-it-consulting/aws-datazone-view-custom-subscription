@@ -230,7 +230,6 @@ def ensure_role_has_extended_policy(role_arn):
 
     # Check if the role has the managed policy attached
     has_already_policy = False
-    policy_name = os.environ['DATAZONE_USER_CUSTOM_MANAGED_POLICY_NAME']
     policy_arn = os.environ['DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN']
 
     # retrieve role name from arn
@@ -241,16 +240,18 @@ def ensure_role_has_extended_policy(role_arn):
     )
 
     for policy in resp['AttachedPolicies']:
-        if policy['PolicyName'] == policy_name:
+        if policy['PolicyArn'] == policy_arn:
             has_already_policy = True
 
     if not has_already_policy:
         # Attach the managed policy
         iam_client.attach_role_policy(
             RoleName=role_name,
-            PolicyArn=policy_name
+            PolicyArn=policy_arn
         )
         logger.info(f"Extended Datazone policy attached to role {role_name}")
+    else:
+        logger.info(f"Extended Datazone policy already attached to role {role_name}")
 
 
 # Cache of glue:GetTable responses, aim to speed up the analysis view process
