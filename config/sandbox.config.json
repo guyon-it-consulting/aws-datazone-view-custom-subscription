@@ -1,0 +1,14 @@
+{
+  "datazone": {
+    "domainAwsAccount": {
+      "account": "YOUR_DATAZONE_DOMAIN_AWS_ACCOUNT_ID",
+      "region": "YOUR_DATAZONE_DOMAIN_AWS_REGION"
+    },
+    "environmentsAwsAccounts": [
+      {
+        "account": "YOUR_DATAZONE_ENVIRONMENT_AWS_ACCOUNT_ID",
+        "region": "YOUR_DATAZONE_ENVIRONMENT_AWS_REGION"
+      }
+    ]
+  }
+}

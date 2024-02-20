@@ -9,5 +9,5 @@ cdk.out
 .idea
 package-lock.json
 
-config/*.config.json
-!config/sandbox.config.json
+/config/*.config.json
+!/config/sandbox.config.json

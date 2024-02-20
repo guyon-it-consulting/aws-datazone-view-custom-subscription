@@ -5,6 +5,11 @@
 
 Service Broker API Release Notes
 
+## v0.5.0
+
+* add configuration via file
+* Replace inline policy with custom managed policy attachment
+
 ## v0.4.0
 
 * remove least privilege on specific Domain. can able all domains
@@ -71,14 +76,14 @@ Here the architecture and process.
 - Create a Datazone domain, a project in account A
 - configure and deploy a Datazone environment in account B
 - in account B resides Glue Database and Glue Tables/Views (prerequisite or to be created manually)
-- Edit `./bin/poc-view-subscription.ts`
+- Edit `./config/sandbox.config.json` (Note that you can create your own `xyz.config.json`. You will have to pass -c config=xyz to cdk commands )
   - replace `YOUR_DOMAIN_ID` by the Datazone domain of account A
   - replace `YOUR_DATAZONE_DOMAIN_AWS_ACCOUNT_ID` by the Aws Account id of the Datazone domain (account A)
   - replace `YOUR_DATAZONE_DOMAIN_AWS_REGION` by the Region of the Datazone domain
   - replace `YOUR_DATAZONE_ENVIRONMENT_AWS_ACCOUNT_ID` by the Aws Account id of the Datazone environment (account B), where your data resides
   - replace `YOUR_DATAZONE_ENVIRONMENT_AWS_REGION` by the Region of the Datazone Environment domain, where your data resides in account B
 - Bootstrap CDK in accounts (see bellow)
-- Deploy with `cdk deploy --all`
+- Deploy with `cdk deploy --all` or `cdk deploy --all -c config=xyz`
 
 
 ## Bootstrap the account for use with CDK
@@ -152,12 +157,12 @@ fi
 
 ## Useful commands
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `cdk deploy`      deploy this stack to your default AWS account/region
-* `cdk diff`        compare deployed stack with current state
-* `cdk synth`       emits the synthesized CloudFormation template
+* `npm run build`              compile typescript to js
+* `npm run watch`              watch for changes and compile
+* `npm run test`               perform the jest unit tests
+* `cdk deploy --c config=xyz`  deploy this stack to your default AWS account/region
+* `cdk diff --c config=xyz`    compare deployed stack with current state
+* `cdk synth --c config=xyz`   emits the synthesized CloudFormation template
 
 ## Backlog
 
@@ -177,7 +182,4 @@ fi
 
 ## Warning
 
-- An IAM inline policy is added to datazone_usr environment role.
-  - It contains additional grants to allow describing resource link target databases.
-  - The deletion of environment will fail. **Role has to be manually removed**
-  - as a workaround, a custom Datazone Athena Blueprint with required additional policies must be built. But this is not available yet
+- An IAM Managed policy is attached to datazone_usr environment role.

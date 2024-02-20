@@ -8,6 +8,7 @@ import {
 } from "../lib/custom-data-zone-view-subscription-environment-stack";
 import {Environment} from "aws-cdk-lib/core/lib/environment";
 import {DebugEventBridgeStack} from "../lib/debug-event-bridge-stack";
+import * as path from "node:path";
 
 
 const app = new cdk.App();
@@ -17,12 +18,13 @@ const lambdaConfig= {
   architecture: lambda.Architecture.ARM_64
 }
 
+const configName = app.node.tryGetContext("config") ?? "sandbox";
+const config = require(path.join(__dirname, '..', 'config', `${configName}.config.json`));
+
 // The DataZone Domain account
-const datazoneDomainEnv = {account: 'YOUR_DATAZONE_DOMAIN_AWS_ACCOUNT_ID', region: 'YOUR_DATAZONE_DOMAIN_AWS_REGION'};
+const datazoneDomainEnv = config.datazone.domainAwsAccount;
 // The list of account that hosts DataZone environments
-const targetEnvs: Environment[] = [
-  {account: 'YOUR_DATAZONE_ENVIRONMENT_AWS_ACCOUNT_ID', region: 'YOUR_DATAZONE_ENVIRONMENT_AWS_REGION'}
-];
+const targetEnvs: Environment[] = config.datazone.environmentsAwsAccounts;
 
 // The name of the dedicated Event Bus to create in the target account
 const targetEventBusName = 'datazone-custom-bus';
