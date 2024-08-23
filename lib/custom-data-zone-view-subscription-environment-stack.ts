@@ -10,6 +10,7 @@ import * as path from "path";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as cr from "aws-cdk-lib/custom-resources";
 import {CustomResource} from "aws-cdk-lib";
+import {DebugEventBridge} from "./debug-event-bridge";
 
 export interface CustomDataZoneViewSubscriptionEnvironmentStackProps extends cdk.StackProps {
   datazone: {
@@ -24,6 +25,7 @@ export interface CustomDataZoneViewSubscriptionEnvironmentStackProps extends cdk
     architecture: lambda.Architecture,
     runtime: lambda.Runtime,
   }
+  debugEventBridge?: boolean
 }
 
 export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
@@ -313,7 +315,14 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       },
     });
 
-
-
+    if (props.debugEventBridge ?? false) {
+      new DebugEventBridge(this, `DebugProducerEventBridge`, {
+          eventBusName: props.datazone.eventBusName,
+          eventPattern: {
+            source: [props.datazone.events.source],
+          },
+          logGroupPrefix: 'debug-producer'
+      });
+    }
   }
 }

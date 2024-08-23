@@ -7,6 +7,7 @@ import * as path from "path";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import {Layer} from "./layer";
+import {DebugEventBridge} from "./debug-event-bridge";
 
 export interface CustomDataZoneViewSubscriptionDomainStackProps extends cdk.StackProps {
   datazone: {
@@ -16,7 +17,8 @@ export interface CustomDataZoneViewSubscriptionDomainStackProps extends cdk.Stac
   lambda: {
     architecture: lambda.Architecture,
     runtime: lambda.Runtime,
-  }
+  },
+  debugEventBridge?: boolean
 }
 
 export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
@@ -79,6 +81,16 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
         resources: [`arn:aws:events:*:*:event-bus/${targetEventBusName}`],
       })
     );
+
+    if (props.debugEventBridge ?? false) {
+      new DebugEventBridge(this, 'DebugDomainEventBridge', {
+        eventBusName: 'default',
+        eventPattern: {
+          source: ['aws.datazone'],
+        },
+        logGroupPrefix: 'debug-domain'
+      });
+    }
   }
 }
 

@@ -7,7 +7,6 @@ import {
   CustomDataZoneViewSubscriptionEnvironmentStack
 } from "../lib/custom-data-zone-view-subscription-environment-stack";
 import {Environment} from "aws-cdk-lib/core/lib/environment";
-import {DebugEventBridgeStack} from "../lib/debug-event-bridge-stack";
 import * as path from "node:path";
 
 
@@ -30,37 +29,20 @@ const targetEnvs: Environment[] = config.datazone.environmentsAwsAccounts;
 const targetEventBusName = 'datazone-custom-bus';
 const targetEventSource = 'custom.datazone';
 // The main stack in the domain account
-const domainStack = new CustomDataZoneViewSubscriptionDomainStack(app, 'PocViewSubscriptionStack', {
+const domainStack = new CustomDataZoneViewSubscriptionDomainStack(app, 'DatazoneCustomViewSubscriptionDomainStack', {
   datazone: {
     targetEventBusName: targetEventBusName,
     targetEventSource: targetEventSource
   },
   lambda: lambdaConfig,
   env: datazoneDomainEnv,
+  debugEventBridge: true
 });
-new DebugEventBridgeStack(app, 'DebugDomainEventBridgeStack', {
-  env: datazoneDomainEnv,
-  debug: {
-    eventBusName: 'default',
-    eventPattern: {
-      source: ['aws.datazone'],
-    },
-    logGroupPrefix: 'debug-domain'
-  }
-})
-
-function formatResourceName(s: string) {
-  return replaceAll(replaceAll(s,'-',''), '_', '');
-}
-
-function replaceAll(str: string, search: string, replacement: string) {
-  return str.split(search).join(replacement);
-}
 
 // deployment
 targetEnvs.forEach(env => {
-  new CustomDataZoneViewSubscriptionEnvironmentStack(app, formatResourceName(`DatazoneProducerAccountStack_${env.account}_${env.region}`), {
-    stackName: 'DatazoneProducerAccountStack',
+  new CustomDataZoneViewSubscriptionEnvironmentStack(app, `DatazoneCustomViewSubscriptionEnvironmentStack-${env.account}-${env.region}`, {
+    stackName: 'DatazoneCustomViewSubscriptionEnvironmentStack',
     env,
     datazone: {
       accountId: datazoneDomainEnv.account,
@@ -71,17 +53,7 @@ targetEnvs.forEach(env => {
       environmentAccounts:  targetEnvs
     },
     lambda: lambdaConfig,
+    debugEventBridge: true
   });
-
-  new DebugEventBridgeStack(app, formatResourceName(`DebugProducerEventBridgeStack_${env.account}_${env.region}`), {
-    env,
-    debug: {
-      eventBusName: targetEventBusName,
-      eventPattern: {
-        source: [targetEventSource],
-      },
-      logGroupPrefix: 'debug-producer'
-    }
-  })
 });
 

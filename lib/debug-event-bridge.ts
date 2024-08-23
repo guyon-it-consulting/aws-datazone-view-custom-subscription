@@ -4,28 +4,26 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as events_targets from "aws-cdk-lib/aws-events-targets";
 import * as logs from "aws-cdk-lib/aws-logs";
 
-export interface DebugEventBridgeStackProps extends cdk.StackProps {
-  debug: {
-    eventBusName?: string,
-    eventPattern: cdk.aws_events.EventPattern,
-    logGroupRetention?: logs.RetentionDays,
-    logGroupPrefix?: string
-  }
+export interface DebugEventBridgeProps {
+  eventBusName?: string,
+  eventPattern: cdk.aws_events.EventPattern,
+  logGroupRetention?: logs.RetentionDays,
+  logGroupPrefix?: string
 }
 
-export class DebugEventBridgeStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props: DebugEventBridgeStackProps) {
-    super(scope, id, props);
+export class DebugEventBridge extends Construct {
+  constructor(scope: Construct, id: string, props: DebugEventBridgeProps) {
+    super(scope, id);
 
-    const eventBusName = props.debug.eventBusName ?? 'default';
+    const eventBusName = props.eventBusName ?? 'default';
     const rule = new events.Rule(this, 'DebugRule', {
       eventBus: events.EventBus.fromEventBusName(this, 'EventBus', eventBusName),
-      eventPattern: props.debug.eventPattern
+      eventPattern: props.eventPattern
     });
 
     const logGroup = new logs.LogGroup(this, 'DebugLogGroup', {
-      logGroupName: `/aws/events/${props.debug.logGroupPrefix ?? 'debug'}-${eventBusName}`,
-      retention: props.debug.logGroupRetention ?? logs.RetentionDays.ONE_WEEK,
+      logGroupName: `/aws/events/${props.logGroupPrefix ?? 'debug'}-${eventBusName}`,
+      retention: props.logGroupRetention ?? logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     rule.addTarget(new events_targets.CloudWatchLogGroup(logGroup));
