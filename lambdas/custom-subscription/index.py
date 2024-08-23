@@ -41,7 +41,6 @@ def get_current_principal_identifier():
     caller_arn = sts_client.get_caller_identity()['Arn']
     logger.info(f"callerArn: {caller_arn}")
 
-    import re
     match = re.search(r'^arn:aws:sts::(\d+):assumed-role/([\w-]+)/([\w-]+)$', caller_arn)
     if match:
         role_name = match.group(2)
@@ -165,35 +164,6 @@ def grant_read_on_resource_link(catalog_id, database_name, table_name, principal
     except ClientError as e:
         logger.error(e)
         raise Exception(e)
-
-
-# TODO refactor
-def grant_all_on_table(catalog_id, database_name, table_name, principal_arn):
-    logger.info(f"granting ALL {database_name}.{table_name} to {principal_arn} in {catalog_id}")
-
-    try:
-        lf_client.grant_permissions(
-            Principal={
-                'DataLakePrincipalIdentifier': principal_arn
-            },
-            Resource={
-                'Table': {
-                    'CatalogId': catalog_id,
-                    'DatabaseName': database_name,
-                    'Name': table_name
-                }
-            },
-            Permissions=[
-                'ALL'
-            ],
-            PermissionsWithGrantOption=[
-                'ALL'
-            ]
-        )
-    except ClientError as e:
-        logger.error(e)
-        raise Exception(e)
-
 
 def create_resource_link_table(database, table_name, target_database, target_table_name, target_account_id,
                                target_region):
@@ -341,7 +311,7 @@ def handle_unmanaged_asset_subscription_on_producer(event):
         logger.info("This is a managed asset - ignore it")
         return
 
-        # get subscriptionsM
+    # get subscriptions aws account ids
     subscriptions_principals_accounts = set([subscription['awsAccountId'] for subscription in
                                              event['detail']['subscriptions']])
 
