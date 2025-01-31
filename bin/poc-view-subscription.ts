@@ -52,7 +52,7 @@ targetEnvs.forEach(env => {
       },
       environmentAccounts:  targetEnvs
     },
-    lambda: lambdaConfig,
+    lambdaRuntime: lambdaConfig,
     debugEventBridge: true
   });
 });

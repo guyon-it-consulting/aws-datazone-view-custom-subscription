@@ -9,8 +9,14 @@ from sql_metadata import Parser
 from botocore.exceptions import ClientError
 from botocore.config import Config
 
-logger = logging.getLogger()
-logger.setLevel(os.environ.get("LOGGER_LEVEL", "INFO"))
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import event_source, EventBridgeEvent
+
+EVENT_DETAIL_TYPE_ASSET_SUCCESSFULLY_GRANTED_IN_PUB_ENV = "Unmanaged Asset Successfully Granted in Pub Environment"
+EVENT_DETAIL_TYPE_UNMANAGED_ASSET_SUBSCRIPTION_REQ_ACCEPTED = 'Unmanaged Asset Subscription Request Accepted'
+
+logger = Logger()
 
 ADAPTIVE_RETRIES = Config(
     retries={
@@ -25,6 +31,8 @@ glue_client = boto3.client('glue')
 lf_client = boto3.client('lakeformation', config=ADAPTIVE_RETRIES)
 events_client = boto3.client('events')
 
+dynamodb = boto3.resource('dynamodb')
+subscription_table = dynamodb.Table(os.environ['SUBSCRIPTION_TABLE_NAME'])
 
 # Define a custom function to serialize objects
 def custom_serializer(obj):
@@ -305,15 +313,15 @@ def analyze_view(database_name, name):
     return deps_glue_tables
 
 
-def handle_unmanaged_asset_subscription_on_producer(event):
+def handle_unmanaged_asset_subscription_on_producer(event: EventBridgeEvent):
     logger.info('Handle subscription')
-    if event['detail']['data']['isManagedAsset']:
+    if event.detail['data']['isManagedAsset']:
         logger.info("This is a managed asset - ignore it")
         return
 
     # get subscriptions aws account ids
     subscriptions_principals_accounts = set([subscription['awsAccountId'] for subscription in
-                                             event['detail']['subscriptions']])
+                                             event.detail['subscriptions']])
 
     if current_account_id in subscriptions_principals_accounts:
         logger.info("One of the subscription environment is in the current - producer environment - account")
@@ -322,8 +330,8 @@ def handle_unmanaged_asset_subscription_on_producer(event):
 
     logger.debug(f"Roles for Subscription {subscriptions_principals_accounts}")
 
-    table_arn = event['detail']['asset']['tableArn']
-    table_name = event['detail']['asset']['tableName']
+    table_arn = event.detail['asset']['tableArn']
+    table_name = event.detail['asset']['tableName']
 
     # table_arn 'arn:aws:glue:us-east-1:123456789101:table/my_database/my_table'
     #split arn by ':'
@@ -365,6 +373,15 @@ def handle_unmanaged_asset_subscription_on_producer(event):
                 principal,
                 True
             )
+
+            subscription_table.put_item(
+                Item={
+                    'principalArn': principal,
+                    'targetGlueAsset': f"{target_database}.{table_name}",
+                    'dependentGlueAsset': f"{dependent_item['database_name']}.{dependent_item['table_name']}"
+                }
+            )
+
     # Grant databases
     for database_name in set([dependent_item['database_name'] for dependent_item in dependent_table_or_views]):
         for principal in subscriptions_principals_accounts:
@@ -376,7 +393,7 @@ def handle_unmanaged_asset_subscription_on_producer(event):
             )
 
     # SEND AN EVENT for each Subscription
-    for subscription in event['detail']['subscriptions']:
+    for subscription in event.detail['subscriptions']:
         consumer_region = subscription['region']
         consumer_aws_account_id = subscription['awsAccountId']
 
@@ -384,8 +401,8 @@ def handle_unmanaged_asset_subscription_on_producer(event):
         logger.info(f"Pushing event to {target_event_bus}")
 
         detail_event = {
-            "data": event['detail']['data'],
-            "asset": event['detail']['asset'],
+            "data": event.detail['data'],
+            "asset": event.detail['asset'],
             "subscription": subscription,
             "glueDependencies": dependent_table_or_views,
         }
@@ -395,7 +412,7 @@ def handle_unmanaged_asset_subscription_on_producer(event):
         resp = events_client.put_events(
             Entries=[{
                 'Source': os.environ['EVENT_SOURCE'],
-                'DetailType': "Unmanaged Asset Successfully Granted in Pub Environment",
+                'DetailType': EVENT_DETAIL_TYPE_ASSET_SUCCESSFULLY_GRANTED_IN_PUB_ENV,
                 'Detail': json.dumps(detail_event, default=custom_serializer),
                 'EventBusName': target_event_bus
             }]
@@ -409,7 +426,7 @@ def handle_unmanaged_asset_subscription_on_producer(event):
 def handle_unmanaged_asset_subscription_on_consumer(event):
     logger.info('Handle Unmanaged asset subscription on consumer')
 
-    table_arn = event['detail']['asset']['tableArn']
+    table_arn = event.detail['asset']['tableArn']
 
     arn_split = table_arn.split(':')
     target_region = arn_split[3]
@@ -420,8 +437,8 @@ def handle_unmanaged_asset_subscription_on_consumer(event):
     table_name = target_table_name
     target_database = resource_split[1]
 
-    consumer_database = event['detail']['subscription']['glueConsumerDBName']
-    user_role_arn = event['detail']['subscription']['athenaUserRoleArn']
+    consumer_database = event.detail['subscription']['glueConsumerDBName']
+    user_role_arn = event.detail['subscription']['athenaUserRoleArn']
 
     try:
         logger.info(f"Granting current principal to {consumer_database} Database to {lambda_principal}")
@@ -452,7 +469,7 @@ def handle_unmanaged_asset_subscription_on_consumer(event):
     distinct_deps_databases = set()
     distinct_deps_databases.add(target_database)
 
-    for glueDep in event['detail']['glueDependencies']:
+    for glueDep in event.detail['glueDependencies']:
         # First, grant Lambda principal to be able to grant to other principal
         grant_read_on_database(target_account_id, glueDep['database_name'], lambda_principal, allows_grants=True)
         grant_read_on_table(target_account_id, glueDep['database_name'], glueDep['table_name'], lambda_principal,
@@ -482,12 +499,13 @@ def handle_unmanaged_asset_subscription_on_consumer(event):
 current_account_id = get_current_account_id()
 lambda_principal = get_current_principal_identifier()
 
-
-def lambda_handler(event, context):
+@logger.inject_lambda_context(log_event=True)
+@event_source(data_class=EventBridgeEvent)
+def lambda_handler(event: EventBridgeEvent, context: LambdaContext):
     logger.info(event)
 
-    if event['detail-type'] == 'Unmanaged Asset Subscription Request Accepted':
+    if event.detail_type == EVENT_DETAIL_TYPE_UNMANAGED_ASSET_SUBSCRIPTION_REQ_ACCEPTED:
         handle_unmanaged_asset_subscription_on_producer(event)
 
-    elif event['detail-type'] == 'Unmanaged Asset Successfully Granted in Pub Environment':
+    elif event.detail_type == EVENT_DETAIL_TYPE_ASSET_SUCCESSFULLY_GRANTED_IN_PUB_ENV:
         handle_unmanaged_asset_subscription_on_consumer(event)

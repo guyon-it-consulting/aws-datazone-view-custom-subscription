@@ -44,13 +44,15 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
     // the target EventBus depends on the content of the event itself.
     // So let's use a Lambda in order to propagate the event to the right account.
     const dispatchEventFunction = new lambda.Function(this, 'DispatchDatazoneEvents', {
+      description: 'Gather Data & Dispatch Datazone Unmanaged Assets Events',
       runtime: props.lambda.runtime,
       architecture: props.lambda.architecture,
       code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas', 'event-dispatcher')),
       handler: 'index.lambda_handler',
       logRetention: logs.RetentionDays.TWO_WEEKS,
       layers: [
-        commonLayer.layer
+        commonLayer.layer,
+        lambda.LayerVersion.fromLayerVersionArn(this, 'PowerTools', `arn:aws:lambda:${cdk.Stack.of(this).region}:017000801446:layer:AWSLambdaPowertoolsPythonV2-Arm64:79`)
       ],
       environment: {
         EVENT_BUS_NAME: targetEventBusName,
@@ -70,7 +72,7 @@ export class CustomDataZoneViewSubscriptionDomainStack extends cdk.Stack {
           'datazone:ListEnvironments',
         ],
         // resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/${props.datazone.domainId}`],
-        resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/*`],
+        resources: [`arn:aws:datazone:${this.region}:${this.account}:domain/*`], //TODO list explicitly managed domains
       })
     );
 
