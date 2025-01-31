@@ -265,7 +265,7 @@ def get_view_sql(database_name, view_name):
 
     result = re.search(rf"^/\*\sPresto\sView:\s({base64_regex})\s\*/$", view_original_text)
     base64_query = result.group(1)
-    raw = base64.b64decode(base64_query.encode('ascii')).decode('ascii')
+    raw = base64.b64decode(base64_query.encode('utf-8')).decode('utf-8')
     dumps = json.loads(raw)
 
     clear_sql = dumps['originalSql']
