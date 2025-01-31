@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import {Construct} from "constructs";
 import * as events from 'aws-cdk-lib/aws-events';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as eventsTargets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambdas from "aws-cdk-lib/aws-lambda";
@@ -8,9 +9,8 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import {Layer} from "./layer";
 import * as path from "path";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as cr from "aws-cdk-lib/custom-resources";
-import {CustomResource} from "aws-cdk-lib";
 import {DebugEventBridge} from "./debug-event-bridge";
+import {SetUpAdditionalLakeFormationAdministrator} from "./set-up-additional-lake-formation-administrator";
 
 export interface CustomDataZoneViewSubscriptionEnvironmentStackProps extends cdk.StackProps {
   datazone: {
@@ -21,7 +21,7 @@ export interface CustomDataZoneViewSubscriptionEnvironmentStackProps extends cdk
     }
     environmentAccounts: cdk.Environment[]
   },
-  lambda: {
+  lambdaRuntime: {
     architecture: lambda.Architecture,
     runtime: lambda.Runtime,
   }
@@ -82,31 +82,43 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       })
     });
 
+    // Create DynamoDB Table
+    const subscriptionTable = new dynamodb.TableV2(this, 'AssetsPerPrincipalSubscriptionsTable', {
+      partitionKey: {name: 'principalArn', type: dynamodb.AttributeType.STRING},
+      sortKey: {name: 'targetGlueAsset', type: dynamodb.AttributeType.STRING},
+      pointInTimeRecovery: true
+    });
+
 
     const commonLayer = new Layer(this, "CommonLayer", {
-      runtime: props.lambda.runtime,
-      architecture: props.lambda.architecture,
+      runtime: props.lambdaRuntime.runtime,
+      architecture: props.lambdaRuntime.architecture,
       path: path.join(__dirname, '..', 'lambdas', "common-layer"),
     });
 
     const customSubscriptionFunction = new lambdas.Function(this, 'CustomSubscriptionFunction', {
-      runtime: props.lambda.runtime,
-      architecture: props.lambda.architecture,
+      description: 'Handle Datazone Unmanaged Assets',
+      runtime: props.lambdaRuntime.runtime,
+      architecture: props.lambdaRuntime.architecture,
       code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas', 'custom-subscription')),
       handler: 'index.lambda_handler',
       logRetention: logs.RetentionDays.TWO_WEEKS,
       layers: [
-        commonLayer.layer
+        commonLayer.layer,
+        lambda.LayerVersion.fromLayerVersionArn(this, 'PowerTools', `arn:aws:lambda:${cdk.Stack.of(this).region}:017000801446:layer:AWSLambdaPowertoolsPythonV2-Arm64:79`)
       ],
       timeout: cdk.Duration.minutes(1),
       environment: {
         EVENT_BUS_NAME: props.datazone.eventBusName,
         EVENT_SOURCE: props.datazone.events.source,
-        DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN: datazoneCustomGrant.managedPolicyArn
+        DATAZONE_USER_CUSTOM_MANAGED_POLICY_ARN: datazoneCustomGrant.managedPolicyArn,
+        SUBSCRIPTION_TABLE_NAME: subscriptionTable.tableName
       }
     });
     // Register the dispatch Lambda on the rule
     customSubscriptionRule.addTarget(new eventsTargets.LambdaFunction(customSubscriptionFunction));
+
+    subscriptionTable.grantReadWriteData(customSubscriptionFunction);
 
     // Allows to retrieve Tables details
     customSubscriptionFunction.addToRolePolicy(
@@ -265,54 +277,12 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
       value: customSubscriptionFunction.role!.roleArn
     });
 
-    // Create a custom resource for handling DatalakeAdministrator
-
-    // first create function
-    const lakeformationDefaultSettingsHandler = new lambdas.Function(this, 'LakeformationDefaultSettingsHandler', {
-      runtime: props.lambda.runtime,
-      architecture: props.lambda.architecture,
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas', 'custom-resource-lf-admin')),
-      handler: 'index.lambda_handler',
-      logRetention: logs.RetentionDays.TWO_WEEKS,
-      layers: [
-        commonLayer.layer
+    // Add the function as a DatalakeAdministrator
+    new SetUpAdditionalLakeFormationAdministrator(this, 'LakeFormationAdministrator', {
+      lambda: props.lambdaRuntime,
+      rolesArn: [
+        customSubscriptionFunction.role!.roleArn
       ],
-      environment: {
-        AWS_ACCOUNT: this.account,
-        REGION: this.region
-      },
-    });
-
-    lakeformationDefaultSettingsHandler.addToRolePolicy(
-      new iam.PolicyStatement({
-          actions: [
-            'lakeformation:PutDataLakeSettings',
-            'lakeformation:GetDataLakeSettings'
-          ],
-          resources: ['*']
-        }
-      ));
-    lakeformationDefaultSettingsHandler.addToRolePolicy(
-      new iam.PolicyStatement({
-          actions: [
-            'iam:GetRole',
-          ],
-          resources: ['*']
-        }
-      ));
-
-    const lakeformationDefaultSettingsProvider = new cr.Provider(this,'LakeformationDefaultSettingsProvider', {
-      onEventHandler: lakeformationDefaultSettingsHandler,
-    });
-
-    new CustomResource(this,'DefaultLakeFormationSettings', {
-      serviceToken: lakeformationDefaultSettingsProvider.serviceToken,
-      resourceType: 'Custom::LakeformationDefaultSettings',
-      properties: {
-        DataLakeAdmins: [
-          customSubscriptionFunction.role?.roleArn,
-        ]
-      },
     });
 
     if (props.debugEventBridge ?? false) {
@@ -326,3 +296,5 @@ export class CustomDataZoneViewSubscriptionEnvironmentStack extends cdk.Stack {
     }
   }
 }
+
+

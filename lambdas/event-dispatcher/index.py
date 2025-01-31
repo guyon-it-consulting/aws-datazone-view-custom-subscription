@@ -1,16 +1,20 @@
 import datetime
 import json
-import logging
 import os
 
 import boto3
 
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import event_source, EventBridgeEvent
+
+logger = Logger()
+
 datazone_client = boto3.client('datazone')
 events_client = boto3.client('events')
 
-logger = logging.getLogger()
-logger.setLevel(os.environ.get("LOGGER_LEVEL", "INFO"))
-
+#logger = logging.getLogger()
+#logger.setLevel(os.environ.get("LOGGER_LEVEL", "INFO"))
 
 # Define a custom function to serialize objects
 def custom_serializer(obj):
@@ -53,24 +57,25 @@ def retrieve_environments_by_project(domain_id, project_id):
 
     return environments
 
-
-def lambda_handler(event, context):
+@logger.inject_lambda_context(log_event=True)
+@event_source(data_class=EventBridgeEvent)
+def lambda_handler(event: EventBridgeEvent, context: LambdaContext):
     logger.info(event)
 
     # only if isManagedAsset=false
 
-    if event['detail']['data']['isManagedAsset']:
+    if event.detail['data']['isManagedAsset']:
         logger.info("This is a managed asset - ignore it")
         return
 
     # get domain info
-    domain_id = event['detail']['metadata']['domain']
+    domain_id = event.detail['metadata']['domain']
     logger.info(f"Domain is {domain_id}")
 
     subscribed_envs = []
 
     # find subscription project / accounts / environments
-    for subscribed_principal in event['detail']['data']['subscribedPrincipals']:
+    for subscribed_principal in event.detail['data']['subscribedPrincipals']:
         if subscribed_principal['type'] != 'PROJECT':
             logger.warning(f"This is not a supported subscription principal type {subscribed_principal}")
             continue
@@ -103,7 +108,7 @@ def lambda_handler(event, context):
                 "glueConsumerDBName": glue_consumer_db_name,
             })
 
-    for listing in event['detail']['data']['subscribedListings']:
+    for listing in event.detail['data']['subscribedListings']:
         listing_infos = retrieve_listing_infos(domain_id, listing['id'], listing['version'])
 
         # Retrieve producer infos from the subscription listing
@@ -113,7 +118,7 @@ def lambda_handler(event, context):
         producer_region = listing_infos_details['GlueViewForm']['region']
 
         forwarded_event = {
-            "data": event['detail']['data'],
+            "data": event.detail['data'],
             "asset": {
                 # "databaseName": listing_infos_details['GlueViewForm']['databaseName'],
                 "tableName": listing_infos_details['GlueViewForm']['tableName'],
@@ -129,7 +134,6 @@ def lambda_handler(event, context):
         resp = events_client.put_events(
             Entries=[{
                 'Source': os.environ['EVENT_SOURCE'],
-                # 'DetailType': event['detail-type'],
                 'DetailType': 'Unmanaged Asset Subscription Request Accepted',
                 'Detail': json.dumps(forwarded_event, default=custom_serializer),
                 'EventBusName': target_event_bus

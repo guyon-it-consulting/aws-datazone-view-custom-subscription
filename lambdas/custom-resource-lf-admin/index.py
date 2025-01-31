@@ -1,11 +1,12 @@
 import os
 import boto3
 from botocore.exceptions import ClientError
-import logging
 
-logger = logging.getLogger()
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
-log = logging.getLogger(__name__)
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import event_source, CloudFormationCustomResourceEvent
+
+logger = Logger()
 
 AWS_ACCOUNT = os.environ.get('AWS_ACCOUNT')
 AWS_REGION = os.environ.get('AWS_REGION')
@@ -22,18 +23,19 @@ def validate_principals(principals):
     validated_principals = []
     for principal in principals:
         if ":role/" in principal:
-            log.info(f'Principal {principal} is an IAM role, validating....')
+            logger.info(f'Principal {principal} is an IAM role, validating....')
             try:
                 iam_client.get_role(RoleName=principal.split("/")[-1])
-                log.info(f'Adding principal {principal} to validated principals')
+                logger.info(f'Adding principal {principal} to validated principals')
                 validated_principals.append(principal)
             except Exception as e:
-                log.exception(f'Failed to get role {principal} due to: {str(e)}')
+                logger.exception(f'Failed to get role {principal} due to: {str(e)}')
     return validated_principals
 
-
-def lambda_handler(event, context):
-    request_type = event['RequestType']
+@logger.inject_lambda_context(log_event=True)
+@event_source(data_class=CloudFormationCustomResourceEvent)
+def lambda_handler(event: CloudFormationCustomResourceEvent, context: LambdaContext):
+    request_type = event.request_type
     if request_type == 'Create':
         return on_create(event)
     if request_type == 'Update':
@@ -43,11 +45,11 @@ def lambda_handler(event, context):
     raise Exception('Invalid request type: %s' % request_type)
 
 
-def on_create(event):
+def on_create(event: CloudFormationCustomResourceEvent):
     """"Adds the PivotRole to the existing Data Lake Administrators
     Before adding any principal, it validates it exists if it is an IAM role
     """
-    props = clean_props(**event['ResourceProperties'])
+    props = clean_props(**event.resource_properties)
     try:
         response = lf_client.get_data_lake_settings(CatalogId=AWS_ACCOUNT)
         existing_admins = response.get('DataLakeSettings', {}).get('DataLakeAdmins', [])
@@ -69,10 +71,10 @@ def on_create(event):
                 ]
             },
         )
-        log.info(f'Successfully configured AWS LakeFormation data lake admins: {validated_new_admins}| {response}')
+        logger.info(f'Successfully configured AWS LakeFormation data lake admins: {validated_new_admins}| {response}')
 
     except ClientError as e:
-        log.exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
+        logger.exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
         raise Exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
 
     return {
@@ -80,15 +82,15 @@ def on_create(event):
     }
 
 
-def on_update(event):
+def on_update(event: CloudFormationCustomResourceEvent):
     return on_create(event)
 
 
-def on_delete(event):
+def on_delete(event: CloudFormationCustomResourceEvent):
     """"Removes the PivotRole from the existing Data Lake Administrators
     Before adding any principal, it validates it exists if it is an IAM role
     """
-    props = clean_props(**event['ResourceProperties'])
+    props = clean_props(**event.resource_properties)
     try:
         response = lf_client.get_data_lake_settings(CatalogId=AWS_ACCOUNT)
         existing_admins = response.get('DataLakeSettings', {}).get('DataLakeAdmins', [])
@@ -99,7 +101,8 @@ def on_delete(event):
 
         added_admins = props.get('DataLakeAdmins', [])
         for added_admin in added_admins:
-            existing_admins.remove(added_admin)
+            if added_admin in existing_admins:
+                existing_admins.remove(added_admin)
 
         validated_new_admins = validate_principals(existing_admins)
         response = lf_client.put_data_lake_settings(
@@ -111,10 +114,10 @@ def on_delete(event):
                 ]
             },
         )
-        log.info(f'Successfully configured AWS LakeFormation data lake admins: {validated_new_admins}| {response}')
+        logger.info(f'Successfully configured AWS LakeFormation data lake admins: {validated_new_admins}| {response}')
 
     except ClientError as e:
-        log.exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
+        logger.exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
         raise Exception(f'Failed to setup AWS LakeFormation data lake admins due to: {e}')
 
     return {
