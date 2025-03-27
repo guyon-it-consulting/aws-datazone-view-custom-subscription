@@ -62,10 +62,9 @@ def retrieve_environments_by_project(domain_id, project_id):
 def lambda_handler(event: EventBridgeEvent, context: LambdaContext):
     logger.info(event)
 
-    # only if isManagedAsset=false
-
-    if event.detail['data']['isManagedAsset']:
-        logger.info("This is a managed asset - ignore it")
+    # only if isManagedAsset=false and if it has GlueViewAssetType
+    if event.detail['data']['isManagedAsset'] and not 'GlueViewAssetType' in [listing['item']['assetListing']['entityType'] for listing in event.detail['data']['subscribedListings']]:
+        logger.info("There is only managed assets - ignore it")
         return
 
     # get domain info

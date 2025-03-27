@@ -315,8 +315,8 @@ def analyze_view(database_name, name):
 
 def handle_unmanaged_asset_subscription_on_producer(event: EventBridgeEvent):
     logger.info('Handle subscription')
-    if event.detail['data']['isManagedAsset']:
-        logger.info("This is a managed asset - ignore it")
+    if event.detail['data']['isManagedAsset'] and not 'GlueViewAssetType' in [listing['item']['assetListing']['entityType'] for listing in event.detail['data']['subscribedListings']]:
+        logger.info("There is only managed assets - ignore it")
         return
 
     # get subscriptions aws account ids
@@ -339,7 +339,6 @@ def handle_unmanaged_asset_subscription_on_producer(event: EventBridgeEvent):
     # keep last part and split with '/'
     resource_split = arn_split[-1].split('/')
     target_database = resource_split[1]
-
 
     logger.info(f"Handle table {table_name} in Database: {target_database}")
 
